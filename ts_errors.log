@@ -1,0 +1,24 @@
+.next/types/validator.ts(116,39): error TS2307: Cannot find module '../../app/api/results/route.js' or its corresponding type declarations.
+app/(dashboard)/analyze/page.tsx(1,30): error TS2307: Cannot find module '@/components/analysis-form' or its corresponding type declarations.
+app/(dashboard)/history/page.tsx(1,30): error TS2307: Cannot find module '@/components/history-table' or its corresponding type declarations.
+app/(dashboard)/results/[id]/page.tsx(1,28): error TS2307: Cannot find module '@/components/result-card' or its corresponding type declarations.
+app/(dashboard)/results/[id]/page.tsx(2,35): error TS2307: Cannot find module '@/components/verdict-confidence' or its corresponding type declarations.
+components/ablation/AblationRadar.tsx(14,52): error TS2339: Property 'accuracy' does not exist on type 'AblationCondition'.
+components/ablation/AblationRadar.tsx(15,52): error TS2339: Property 'precision' does not exist on type 'AblationCondition'.
+components/ablation/AblationRadar.tsx(16,52): error TS2339: Property 'recall' does not exist on type 'AblationCondition'.
+components/ablation/AblationRadar.tsx(17,52): error TS2339: Property 'f1' does not exist on type 'AblationCondition'.
+components/ablation/AblationRadar.tsx(35,22): error TS2339: Property 'label' does not exist on type 'AblationCondition'.
+components/ablation/AblationTable.tsx(32,24): error TS2339: Property 'label' does not exist on type 'AblationCondition'.
+components/ablation/AblationTable.tsx(35,21): error TS2339: Property 'isWinner' does not exist on type 'AblationCondition'.
+components/ablation/AblationTable.tsx(40,24): error TS2339: Property 'isWinner' does not exist on type 'AblationCondition'.
+components/ablation/AblationTable.tsx(46,27): error TS2339: Property 'isWinner' does not exist on type 'AblationCondition'.
+components/ablation/AblationTable.tsx(50,26): error TS2339: Property 'label' does not exist on type 'AblationCondition'.
+components/ablation/AblationTable.tsx(59,25): error TS2339: Property 'isWinner' does not exist on type 'AblationCondition'.
+components/ablation/AblationTable.tsx(62,21): error TS7053: Element implicitly has an 'any' type because expression of type '"accuracy" | "precision" | "recall" | "f1"' can't be used to index type 'AblationCondition'.
+  Property 'accuracy' does not exist on type 'AblationCondition'.
+components/ablation/ModalityHeatmap.tsx(58,26): error TS2339: Property 'label' does not exist on type 'AblationCondition'.
+components/ablation/ModalityHeatmap.tsx(60,22): error TS2339: Property 'isWinner' does not exist on type 'AblationCondition'.
+components/ablation/ModalityHeatmap.tsx(60,73): error TS2339: Property 'label' does not exist on type 'AblationCondition'.
+components/ablation/ModalityHeatmap.tsx(60,93): error TS2339: Property 'label' does not exist on type 'AblationCondition'.
+components/ablation/ModalityHeatmap.tsx(63,29): error TS7053: Element implicitly has an 'any' type because expression of type '"accuracy" | "precision" | "recall" | "f1"' can't be used to index type 'AblationCondition'.
+  Property 'accuracy' does not exist on type 'AblationCondition'.
