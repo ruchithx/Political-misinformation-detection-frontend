@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import type { Platform } from '@/lib/types';
 
 interface InputFormProps {
-  onSubmit: (text: string, platform: Platform, imageFile?: File | null) => void;
+  onSubmit: (text: string, platform: Platform, imageFile?: File | null, postUrl?: string) => void;
   isLoading: boolean;
 }
 
@@ -19,6 +19,7 @@ const PLATFORMS: { key: Platform; label: string; abbr: string }[] = [
 
 export function InputForm({ onSubmit, isLoading }: InputFormProps) {
   const [text, setText] = useState('');
+  const [postUrl, setPostUrl] = useState('');
   const [platform, setPlatform] = useState<Platform>('twitter');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -52,7 +53,7 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!text.trim() || isLoading) return;
-    onSubmit(text.trim(), platform, imageFile);
+    onSubmit(text.trim(), platform, imageFile, postUrl.trim() || undefined);
   };
 
   return (
@@ -107,6 +108,31 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
           <span>{text.length} characters</span>
           <span>{text.split(/\s+/).filter(Boolean).length} words</span>
         </div>
+      </div>
+
+      {/* Media Context (URL) input */}
+      <div>
+        <label
+          htmlFor="post-url"
+          className="mb-2 block text-xs font-semibold uppercase tracking-widest text-muted-foreground"
+        >
+          Media Context (Post URL)
+        </label>
+        <input
+          id="post-url"
+          type="url"
+          value={postUrl}
+          onChange={(e) => setPostUrl(e.target.value)}
+          placeholder="https://twitter.com/news/status/..."
+          className={cn(
+            'w-full rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50',
+            'focus:border-[#3B6FD4] focus:outline-none focus:ring-1 focus:ring-[#3B6FD4]/30 transition-colors',
+          )}
+          style={{ fontFamily: 'var(--font-mono)' }}
+        />
+        <p className="mt-1.5 text-[10px] text-muted-foreground/70 leading-relaxed">
+          Structural and behavioral features (like domain credibility and source metadata) will be automatically evaluated from the URL context.
+        </p>
       </div>
 
       {/* Image drop zone */}

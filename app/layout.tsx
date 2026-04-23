@@ -52,7 +52,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${plusJakartaSans.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full antialiased`}
     >
-      <body className="h-full">
+      <body className="h-full" suppressHydrationWarning>
         <ThemeProvider>
           <QueryProvider>{children}</QueryProvider>
         </ThemeProvider>
