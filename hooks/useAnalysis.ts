@@ -5,7 +5,7 @@ import type { AnalysisResult, Platform } from '@/lib/types';
 import { fileToBase64 } from '@/lib/api/formatters';
 
 // ── API base URL ──────────────────────────────────────────────────────
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
 
 // ── Types matching FastAPI response schemas ───────────────────────────
 
@@ -45,6 +45,7 @@ export interface SubmitAnalysisInput {
   text: string;
   platform: Platform;
   imageFile?: File | null;
+  socialData?: Record<string, any>;
 }
 
 interface UseAnalysisArgs {
@@ -61,14 +62,20 @@ async function callPredict(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(60_000),
   });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(
-      err.detail ?? err.error ?? `Predict API error: ${res.status}`,
-    );
+    let msg = `Predict API error: ${res.status}`;
+    if (err.detail) {
+      msg = typeof err.detail === 'string' 
+        ? err.detail 
+        : JSON.stringify(err.detail);
+    } else if (err.error) {
+      msg = err.error;
+    }
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -76,17 +83,18 @@ async function callPredict(
 async function callAblationRun(
   text: string,
   imageBase64?: string,
+  socialData?: Record<string, any>,
 ): Promise<AblationRunResponse> {
   // Build request — only include modalities we actually have
   const body: Record<string, unknown> = { text };
   if (imageBase64) body.image_data = imageBase64;
-  // social_data not yet available from the frontend
+  if (socialData) body.social_data = socialData;
 
   const res = await fetch(`${API_BASE}/ablation/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(60_000),
   });
 
   if (!res.ok) {
@@ -199,7 +207,7 @@ function buildResult(
 
 export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
   return useMutation<AnalysisResult, Error, SubmitAnalysisInput>({
-    mutationFn: async ({ text, platform, imageFile }) => {
+    mutationFn: async ({ text, platform, imageFile, socialData }) => {
       // Convert image to base64 if provided
       let imageBase64: string | undefined;
       if (imageFile) {
@@ -210,15 +218,18 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
       // Predict is required. Ablation failure is non-fatal.
       const [predictSettled, ablationSettled] = await Promise.allSettled([
         callPredict(text, imageBase64),
-        callAblationRun(text, imageBase64),
+        callAblationRun(text, imageBase64, socialData),
       ]);
 
       // Predict must succeed
       if (predictSettled.status === 'rejected') {
-        throw new Error(
-          predictSettled.reason?.message ??
-            'Prediction failed. Is FastAPI running?',
-        );
+        const error = predictSettled.reason;
+        const msg = typeof error === 'string' 
+          ? error 
+          : error?.message || JSON.stringify(error) || 'Prediction failed. Is FastAPI running?';
+        
+        console.error('[useAnalysis] Predict mutation failed:', error);
+        throw new Error(msg);
       }
 
       const predict = predictSettled.value;

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Analyze', icon: Search },
+  { href: '/test-lab', label: 'Test Lab', icon: FlaskConical },
   { href: '/history', label: 'History', icon: Clock },
 ];
 

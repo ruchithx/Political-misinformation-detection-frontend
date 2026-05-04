@@ -25,17 +25,30 @@ export default function DashboardPage() {
     text: string,
     platform: Platform,
     imageFile?: File | null,
+    postUrl?: string,
   ) => {
     setIsPending(true);
     try {
-      const [analysisRes, ablationRes] = await Promise.all([
-        runAnalysis({ text, platform, imageFile }),
-        runAblation(text),
-      ]);
+      // ── SHIM: Mock Media Context from URL ──────────────────────────────
+      let socialData = undefined;
+      if (postUrl) {
+        let domain = 'web';
+        try { domain = new URL(postUrl).hostname.replace('www.', ''); } catch(e) {}
+        
+        socialData = {
+          domain_credibility_score: domain.includes('reuters') || domain.includes('apnews') || domain.includes('bbc') ? 0.95 : 0.45,
+          media_richness_score: 0.7,
+          metadata_completeness: 0.8,
+          platform: domain.includes('twitter') || domain.includes('x.com') ? 'twitter' : (domain.includes('facebook') ? 'facebook' : 'web'),
+          author_follow_count: 5000,
+          verified: domain.includes('twitter') || domain.includes('facebook') ? 1 : 0
+        };
+      }
 
-      const finalResult = { ...analysisRes, ablationData: ablationRes };
-      setResult(finalResult);
-      addResult(finalResult);
+      const analysisRes = await runAnalysis({ text, platform, imageFile, socialData });
+
+      setResult(analysisRes);
+      addResult(analysisRes);
       increment();
     } catch (e) {
       console.error(e);
