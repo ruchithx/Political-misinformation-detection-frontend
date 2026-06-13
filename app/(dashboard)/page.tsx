@@ -29,23 +29,21 @@ export default function DashboardPage() {
   ) => {
     setIsPending(true);
     try {
-      // ── SHIM: Mock Media Context from URL ──────────────────────────────
-      let socialData = undefined;
-      if (postUrl) {
-        let domain = 'web';
-        try { domain = new URL(postUrl).hostname.replace('www.', ''); } catch(e) {}
-        
-        socialData = {
-          domain_credibility_score: domain.includes('reuters') || domain.includes('apnews') || domain.includes('bbc') ? 0.95 : 0.45,
-          media_richness_score: 0.7,
-          metadata_completeness: 0.8,
-          platform: domain.includes('twitter') || domain.includes('x.com') ? 'twitter' : (domain.includes('facebook') ? 'facebook' : 'web'),
-          author_follow_count: 5000,
-          verified: domain.includes('twitter') || domain.includes('facebook') ? 1 : 0
-        };
-      }
-
-      const analysisRes = await runAnalysis({ text, platform, imageFile, socialData });
+      // ─────────────────────────────────────────────────────────────────
+      // Send the RAW URL to the backend. Do NOT compute media context
+      // features here. The backend runs the real feature engineering
+      // pipeline (extract_media_context_features) which produces the full
+      // 35-feature vector by parsing the URL structure and fetching the
+      // page's Open Graph / Twitter Card metadata. Computing fake values
+      // in the frontend would send constant garbage to a model trained
+      // on 35 real features, breaking predictions.
+      // ─────────────────────────────────────────────────────────────────
+      const analysisRes = await runAnalysis({
+        text,
+        platform,
+        imageFile,
+        postUrl: postUrl || undefined, // raw URL only — backend extracts features
+      });
 
       setResult(analysisRes);
       addResult(analysisRes);
@@ -71,12 +69,6 @@ export default function DashboardPage() {
           </p>
         </div>
         <InputForm onSubmit={handleSubmit} isLoading={isPending} />
-
-        {/* Footer/disclaimer */}
-        {/* <div className="mt-auto pt-6 text-xs text-muted-foreground">
-          Models used: BERT + ResNet-50 + GAT (Early Fusion). Predictions are
-          probabilities, not absolute facts.
-        </div> */}
       </div>
 
       {/* Right panel */}
