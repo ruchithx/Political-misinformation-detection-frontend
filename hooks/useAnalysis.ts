@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
-import type { AnalysisResult, Platform } from '@/lib/types';
+import type { AnalysisResult, Platform, MediaContextResult } from '@/lib/types';
 import { fileToBase64 } from '@/lib/api/formatters';
 
 // ── API base URL ──────────────────────────────────────────────────────
@@ -107,6 +107,27 @@ async function callAblationRun(
   return res.json();
 }
 
+async function callMediaPredict(
+  socialData: Record<string, unknown>,
+): Promise<MediaContextResult> {
+  console.log('[callMediaPredict] Calling POST /media/predict');
+  console.log('[callMediaPredict] media_data payload:', JSON.stringify(socialData));
+  const res = await fetch(`${API_BASE}/media/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ media_data: socialData }),
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      err.detail ?? err.error ?? `Media predict API error: ${res.status}`,
+    );
+  }
+  return res.json();
+}
+
 // ── Map API responses → AnalysisResult ───────────────────────────────
 
 function buildResult(
@@ -114,6 +135,7 @@ function buildResult(
   ablation: AblationRunResponse | null,
   platform: Platform,
   inputText: string,
+  mediaContext: MediaContextResult | null,
 ): AnalysisResult {
   const provided = new Set(ablation?.provided_modalities ?? ['text']);
 
@@ -199,7 +221,10 @@ function buildResult(
     rawJson: {
       predict: predict,
       ablation: ablation,
+      mediaContext: mediaContext,
     },
+
+    mediaContextResult: mediaContext,
   };
 }
 
@@ -214,11 +239,14 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
         imageBase64 = await fileToBase64(imageFile);
       }
 
-      // ── Fire both APIs in parallel ──────────────────────────────────
-      // Predict is required. Ablation failure is non-fatal.
-      const [predictSettled, ablationSettled] = await Promise.allSettled([
+      // ── Fire all APIs in parallel ──────────────────────────────────
+      // Predict is required. Ablation + media failures are non-fatal.
+      console.log('[useAnalysis] Before mutation — socialData provided:', !!socialData);
+      console.log('[useAnalysis] socialData:', JSON.stringify(socialData));
+      const [predictSettled, ablationSettled, mediaSettled] = await Promise.allSettled([
         callPredict(text, imageBase64),
         callAblationRun(text, imageBase64, socialData),
+        callMediaPredict((socialData ?? {}) as Record<string, unknown>),
       ]);
 
       // Predict must succeed
@@ -243,7 +271,24 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
         );
       }
 
-      return buildResult(predict, ablation, platform, text);
+      const mediaContext: MediaContextResult | null =
+        mediaSettled.status === 'fulfilled'
+          ? mediaSettled.value
+          : null;
+
+      if (mediaSettled.status === 'rejected') {
+        console.warn(
+          '[useAnalysis] Media predict call failed (non-fatal):',
+          mediaSettled.reason?.message,
+        );
+        console.warn(
+          '[useAnalysis] Check: is the FeatureAttentionMLP checkpoint loaded? ' +
+          '(experiments/feature_attention_mlp/checkpoints/feature_attention_mlp.pt ' +
+          'AND outputs/checkpoints/liar_only/liar_context_metadata.pkl must both exist)',
+        );
+      }
+
+      return buildResult(predict, ablation, platform, text, mediaContext);
     },
 
     onSuccess,

@@ -57,6 +57,17 @@ export interface AnalysisResult {
     claim_count?: number;
   };
   ablationData?: AblationCondition[];
+  mediaContextResult?: MediaContextResult | null;
+}
+
+// ─── Media Context prediction types ─────────────────────────────────────────
+
+export interface MediaContextResult {
+  verdict: string;              // "FAKE" | "REAL"
+  confidence: number;           // 0–1
+  prob_real: number;            // 0–1
+  prob_fake: number;            // 0–1
+  attention: Record<string, number>; // per-feature attention weights
 }
 
 // ─── Ablation data types ──────────────────────────────────────────────────────
