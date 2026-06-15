@@ -110,6 +110,8 @@ async function callAblationRun(
 async function callMediaPredict(
   socialData: Record<string, unknown>,
 ): Promise<MediaContextResult> {
+  console.log('[callMediaPredict] Calling POST /media/predict');
+  console.log('[callMediaPredict] media_data payload:', JSON.stringify(socialData));
   const res = await fetch(`${API_BASE}/media/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -239,10 +241,12 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
 
       // ── Fire all APIs in parallel ──────────────────────────────────
       // Predict is required. Ablation + media failures are non-fatal.
+      console.log('[useAnalysis] Before mutation — socialData provided:', !!socialData);
+      console.log('[useAnalysis] socialData:', JSON.stringify(socialData));
       const [predictSettled, ablationSettled, mediaSettled] = await Promise.allSettled([
         callPredict(text, imageBase64),
         callAblationRun(text, imageBase64, socialData),
-        ...(socialData ? [callMediaPredict(socialData as Record<string, unknown>)] : []),
+        callMediaPredict((socialData ?? {}) as Record<string, unknown>),
       ]);
 
       // Predict must succeed
@@ -267,16 +271,15 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
         );
       }
 
-      // mediaSettled is only present when socialData was provided
       const mediaContext: MediaContextResult | null =
-        mediaSettled && mediaSettled.status === 'fulfilled'
+        mediaSettled.status === 'fulfilled'
           ? mediaSettled.value
           : null;
 
-      if (mediaSettled && mediaSettled.status === 'rejected') {
+      if (mediaSettled.status === 'rejected') {
         console.warn(
           '[useAnalysis] Media predict call failed (non-fatal):',
-          (mediaSettled as PromiseRejectedResult).reason?.message,
+          mediaSettled.reason?.message,
         );
         console.warn(
           '[useAnalysis] Check: is the FeatureAttentionMLP checkpoint loaded? ' +

@@ -10,6 +10,7 @@ import { useHistory } from '@/hooks/useHistory';
 import { useAnalysisCounter } from '@/hooks/useAnalysisCounter';
 import type { AnalysisResult, Platform } from '@/lib/types';
 import { useAnalysis } from '@/hooks/useAnalysis';
+import { buildMediaFeatures } from '@/lib/api/formatters';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -29,20 +30,13 @@ export default function DashboardPage() {
   ) => {
     setIsPending(true);
     try {
-      // ─────────────────────────────────────────────────────────────────
-      // Send the RAW URL to the backend. Do NOT compute media context
-      // features here. The backend runs the real feature engineering
-      // pipeline (extract_media_context_features) which produces the full
-      // 35-feature vector by parsing the URL structure and fetching the
-      // page's Open Graph / Twitter Card metadata. Computing fake values
-      // in the frontend would send constant garbage to a model trained
-      // on 35 real features, breaking predictions.
-      // ─────────────────────────────────────────────────────────────────
+      const socialData = buildMediaFeatures(text, platform, postUrl);
+      console.log('[DashboardPage] Before mutation — socialData payload:', socialData);
       const analysisRes = await runAnalysis({
         text,
         platform,
         imageFile,
-        postUrl: postUrl || undefined, // raw URL only — backend extracts features
+        socialData,
       });
 
       setResult(analysisRes);
