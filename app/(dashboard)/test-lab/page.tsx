@@ -84,7 +84,7 @@ export default function TestLabPage() {
       const result = await runAnalysis({
         text: mockSample.text,
         platform: mockSocialData.platform as any,
-        socialData: mockSocialData
+        mediaContext: mockSocialData,
       });
       
       const rKey = `manual-${mockSample.id}`;
@@ -126,10 +126,10 @@ export default function TestLabPage() {
     const resultKey = `${mode}-${sample.id}`;
     setRunningId(sample.id);
     try {
-      const result = await runAnalysis({ 
-        text: sample.text, 
+      const result = await runAnalysis({
+        text: sample.text,
         platform: 'twitter',
-        socialData: sample.socialData
+        mediaContext: sample.socialData,
       });
       setResultsMap(prev => ({ ...prev, [resultKey]: result }));
       setSelectedResult(result);

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { InputForm } from '@/components/analysis/InputForm';
 import { ResultPanel } from '@/components/analysis/ResultPanel';
 import { LoadingDots } from '@/components/analysis/LoadingDots';
-import { useAblation } from '@/hooks/useAblation';
 import { useHistory } from '@/hooks/useHistory';
 import { useAnalysisCounter } from '@/hooks/useAnalysisCounter';
 import type { AnalysisResult, Platform } from '@/lib/types';
@@ -17,10 +16,9 @@ export default function DashboardPage() {
   const { addResult } = useHistory();
   const { increment } = useAnalysisCounter();
   const [result, setResult] = useState<AnalysisResult | null>(null);
-
   const [isPending, setIsPending] = useState(false);
+
   const { mutateAsync: runAnalysis } = useAnalysis();
-  const { mutateAsync: runAblation } = useAblation();
 
   const handleSubmit = async (
     text: string,

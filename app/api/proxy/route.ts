@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
     // Which FastAPI endpoint to call — defaults to 'predict'
     const target = req.headers.get('x-target-endpoint') ?? 'predict';
-    const allowedTargets = ['predict', 'ablation/run'];
+    const allowedTargets = ['predict', 'ablation/run', 'image/predict'];
 
     if (!allowedTargets.includes(target)) {
       return NextResponse.json(
@@ -24,23 +24,26 @@ export async function POST(req: NextRequest) {
     }
 
     const upstream = await fetch(`${API_BASE}/${target}`, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
-      signal:  AbortSignal.timeout(30_000),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!upstream.ok) {
       const err = await upstream.json().catch(() => ({}));
       return NextResponse.json(
-        { error: err.detail ?? err.error ?? `Upstream error: ${upstream.status}` },
+        {
+          error:
+            err.detail ?? err.error ?? `Upstream error: ${upstream.status}`,
+        },
         { status: upstream.status },
       );
     }
 
     const data = await upstream.json();
+    console.log('🚀 ~ POST ~ data:', data);
     return NextResponse.json(data);
-
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
 
@@ -59,10 +62,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { error: `Proxy error: ${msg}` },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: `Proxy error: ${msg}` }, { status: 502 });
   }
 }
 
@@ -84,8 +84,8 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await upstream.json();
+    console.log('🚀 ~ GET ~ data:', data);
     return NextResponse.json(data);
-
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: `Proxy error: ${msg}` }, { status: 503 });

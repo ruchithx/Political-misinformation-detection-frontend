@@ -7,25 +7,24 @@ import { cn } from '@/lib/utils';
 import type { Platform } from '@/lib/types';
 
 interface InputFormProps {
-  onSubmit: (text: string, platform: Platform, imageFile?: File | null, postUrl?: string) => void;
+  onSubmit: (
+    text: string,
+    platform: Platform,
+    imageFile?: File | null,
+    postUrl?: string,
+  ) => void;
   isLoading: boolean;
 }
 
-const PLATFORMS: { key: Platform; label: string; abbr: string }[] = [
-  { key: 'twitter', label: 'Twitter / X', abbr: '𝕏' },
-  { key: 'reddit', label: 'Reddit', abbr: '●' },
-  { key: 'facebook', label: 'Facebook', abbr: 'f' },
-];
-
 export function InputForm({ onSubmit, isLoading }: InputFormProps) {
   const [text, setText] = useState('');
-  const [postUrl, setPostUrl] = useState('');
   const [platform, setPlatform] = useState<Platform>('twitter');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shouldReduceMotion = useReducedMotion();
+  const [postUrl, setPostUrl] = useState('');
 
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) return;
@@ -58,31 +57,6 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Platform selector */}
-      <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          Platform
-        </label>
-        <div className="flex gap-2">
-          {PLATFORMS.map(({ key, label, abbr }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setPlatform(key)}
-              className={cn(
-                'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all',
-                platform === key
-                  ? 'border-[#3B6FD4] bg-[#3B6FD4]/10 text-[#3B6FD4]'
-                  : 'border-border text-muted-foreground hover:border-[#3B6FD4]/50 hover:text-foreground',
-              )}
-            >
-              <span className="font-mono-num text-[11px]">{abbr}</span>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Text input */}
       <div>
         <label
@@ -131,7 +105,8 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
           style={{ fontFamily: 'var(--font-mono)' }}
         />
         <p className="mt-1.5 text-[10px] text-muted-foreground/70 leading-relaxed">
-          Structural and behavioral features (like domain credibility and source metadata) will be automatically evaluated from the URL context.
+          Structural and behavioral features (like domain credibility and source
+          metadata) will be automatically evaluated from the URL context.
         </p>
       </div>
 

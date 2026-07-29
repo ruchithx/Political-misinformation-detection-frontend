@@ -88,6 +88,7 @@ export const ABLATION_DATA: AblationCondition[] = [
     variant: 'text_only',
     active: { text: true, image: false, social: false },
     prob_fake: 0.65,
+    prob_real: 0.35,
     verdict: 'FAKE',
     is_placeholder: false,
   },

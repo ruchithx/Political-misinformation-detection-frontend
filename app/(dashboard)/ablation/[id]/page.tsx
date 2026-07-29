@@ -267,9 +267,9 @@ export default function ResultDetailPage({
       </div>
 
       {/* Attention tokens */}
-      {result.top_tokens && result.top_tokens.length > 0 && (
+      {/* {result.top_tokens && result.top_tokens.length > 0 && (
         <TopTokensCard tokens={result.top_tokens} />
-      )}
+      )} */}
 
       {/* Feature metrics */}
       {result.features && <FeatureMetricsCard features={result.features} />}
