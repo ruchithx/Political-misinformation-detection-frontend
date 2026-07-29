@@ -1,25 +1,38 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
-import type { AnalysisResult, Platform } from '@/lib/types';
+import type {
+  AnalysisResult,
+  Platform,
+  TextModelResult,
+  ImageModelResult,
+  MediaModelResult,
+  AblationCondition,
+} from '@/lib/types';
 import { fileToBase64 } from '@/lib/api/formatters';
 
-// ── API base URL ──────────────────────────────────────────────────────
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
 
-// ── Types matching FastAPI response schemas ───────────────────────────
+// ── Request / Response types matching FastAPI ─────────────────────────
 
-interface PredictResponse {
-  verdict: string; // "REAL" | "FAKE"
-  confidence: number; // 0–1
-  uncertainty: number;
-  prob_real: number;
+interface PredictRequest {
+  text: string;
+  image?: string | null;
+  caption?: string;
+  ocr_text?: string;
+  media_context?: Record<string, unknown> | null;
+}
+
+interface UnifiedPredictResponse {
+  verdict: string;
   prob_fake: number;
-  threshold: number;
-  top_tokens: { token: string; weight: number }[];
-  features: Record<string, unknown>;
-  text_normalized: string;
-  mc_passes: number;
+  prob_real: number;
+  confidence: number;
+  modalities_used: string[];
+  fusion_formula: string;
+  text: TextModelResult;
+  image: ImageModelResult | null;
+  media: MediaModelResult | null;
   latency_ms: number;
 }
 
@@ -32,10 +45,14 @@ interface AblationVariant {
 }
 
 interface AblationRunResponse {
-  provided_modalities: string[];
-  skipped_modalities: string[];
-  text_normalized: string | null;
   variants: AblationVariant[];
+  individual_scores: {
+    text: number;
+    image?: number;
+    social?: number;
+  };
+  best_variant: string | null;
+  text_normalized: string | null;
   latency_ms: number;
 }
 
@@ -45,23 +62,57 @@ export interface SubmitAnalysisInput {
   text: string;
   platform: Platform;
   imageFile?: File | null;
-  socialData?: Record<string, any>;
+  postUrl?: string;
+  mediaContext?: Record<string, unknown>;
 }
 
 interface UseAnalysisArgs {
   onSuccess?: (result: AnalysisResult) => void;
 }
 
-// ── Internal fetch helpers ────────────────────────────────────────────
+// ── Build media_context from a post URL ───────────────────────────────
+// Extracts URL-derivable and text-derivable features the media model can use.
 
-async function callPredict(
-  text: string,
-  imageBase64?: string,
-): Promise<PredictResponse> {
+function buildMediaContext(postUrl: string, text: string): Record<string, unknown> {
+  const ctx: Record<string, unknown> = {};
+
+  try {
+    const url = new URL(postUrl);
+    const hostname = url.hostname.toLowerCase();
+
+    if (hostname.includes('twitter.com') || hostname.includes('x.com')) {
+      ctx.platform = 'TWITTER15';
+    } else if (hostname.includes('reddit.com')) {
+      ctx.platform = 'web';
+    } else {
+      ctx.platform = 'web';
+    }
+
+    ctx.is_https = postUrl.startsWith('https') ? 1.0 : 0.0;
+    ctx.domain_length = url.hostname.length;
+    ctx.is_url_shortened = ['bit.ly', 'tinyurl.com', 't.co', 'ow.ly', 'buff.ly', 'goo.gl'].some(
+      (s) => hostname.includes(s),
+    ) ? 1.0 : 0.0;
+  } catch {
+    ctx.platform = 'unknown';
+  }
+
+  // Text-derived features
+  ctx.hashtag_count = (text.match(/#\w+/g) ?? []).length;
+  ctx.mention_count = (text.match(/@\w+/g) ?? []).length;
+  ctx.title_exclamation_count = (text.match(/!/g) ?? []).length;
+  ctx.title_caps_word_count = (text.match(/\b[A-Z]{2,}\b/g) ?? []).length;
+
+  return ctx;
+}
+
+// ── API call helpers ──────────────────────────────────────────────────
+
+async function callPredict(body: PredictRequest): Promise<UnifiedPredictResponse> {
   const res = await fetch(`${API_BASE}/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000),
   });
 
@@ -69,9 +120,7 @@ async function callPredict(
     const err = await res.json().catch(() => ({}));
     let msg = `Predict API error: ${res.status}`;
     if (err.detail) {
-      msg = typeof err.detail === 'string' 
-        ? err.detail 
-        : JSON.stringify(err.detail);
+      msg = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
     } else if (err.error) {
       msg = err.error;
     }
@@ -80,16 +129,7 @@ async function callPredict(
   return res.json();
 }
 
-async function callAblationRun(
-  text: string,
-  imageBase64?: string,
-  socialData?: Record<string, any>,
-): Promise<AblationRunResponse> {
-  // Build request — only include modalities we actually have
-  const body: Record<string, unknown> = { text };
-  if (imageBase64) body.image_data = imageBase64;
-  if (socialData) body.social_data = socialData;
-
+async function callAblationRun(body: PredictRequest): Promise<AblationRunResponse> {
   const res = await fetch(`${API_BASE}/ablation/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -98,108 +138,91 @@ async function callAblationRun(
   });
 
   if (!res.ok) {
-    // Ablation failure is non-fatal — we still have the predict result
     const err = await res.json().catch(() => ({}));
-    throw new Error(
-      err.detail ?? err.error ?? `Ablation API error: ${res.status}`,
-    );
+    throw new Error(err.detail ?? err.error ?? `Ablation API error: ${res.status}`);
   }
   return res.json();
 }
 
-// ── Map API responses → AnalysisResult ───────────────────────────────
+// ── Map API response → AnalysisResult ────────────────────────────────
 
 function buildResult(
-  predict: PredictResponse,
+  predict: UnifiedPredictResponse,
   ablation: AblationRunResponse | null,
   platform: Platform,
   inputText: string,
 ): AnalysisResult {
-  const provided = new Set(ablation?.provided_modalities ?? ['text']);
+  const modalities = new Set(predict.modalities_used ?? ['text']);
 
-  // Get prob_fake for a specific variant — null if not run
+  const verdict: AnalysisResult['verdict'] =
+    predict.prob_fake >= 0.5 ? 'MISINFORMATION' : 'CREDIBLE';
+
+  // Ablation variant score helper
   const variantScore = (name: string): number | null => {
     const v = ablation?.variants.find((a) => a.variant === name);
     return v != null ? v.prob_fake * 100 : null;
   };
 
-  // Best fusion score: prefer full_multimodal, fall back down the chain
+  // Fusion score from ablation if available, else from predict fused result
   const fusionScr = (() => {
-    for (const v of [
-      'full_multimodal',
-      'text_image',
-      'text_social',
-      'text_only',
-    ]) {
+    for (const v of ['full_multimodal', 'text_image', 'text_social', 'text_only']) {
       const s = variantScore(v);
       if (s !== null) return s;
     }
     return predict.prob_fake * 100;
   })();
 
-  // Map FastAPI verdict → app verdict labels
-  const verdictMap: Record<string, string> = {
-    FAKE: 'MISINFORMATION',
-    REAL: 'CREDIBLE',
-  };
-  const verdict = verdictMap[predict.verdict] ?? predict.verdict;
-
   return {
     id: `result-${Date.now()}`,
     timestamp: new Date().toISOString(),
     platform,
     inputText,
-    verdict: verdict as AnalysisResult['verdict'],
+    verdict,
 
-    // confidence from FastAPI is 0–1, app expects 0–100
     confidence: predict.confidence * 100,
 
-    // Only set scores for modalities that were actually provided
-    // null means "not run" — the UI hides those cards
-    textScore: provided.has('text')
-      ? (variantScore('text_only') ?? predict.prob_fake * 100)
-      : null,
-    imageScore: provided.has('image') ? variantScore('image_only') : null,
-    socialScore: provided.has('social') ? variantScore('social_only') : null,
+    // Per-modality scores — null when that modality was not provided
+    textScore: predict.text ? predict.text.prob_fake * 100 : null,
+    imageScore: predict.image ? predict.image.prob_fake * 100 : null,
+    socialScore: predict.media ? predict.media.prob_fake * 100 : null,
     fusionScore: fusionScr,
 
-    // ablationData: ONLY the variants the backend actually ran
-    // No placeholders, no dummy zeros
+    // Full per-model results
+    textResult: predict.text ?? null,
+    imageResult: predict.image ?? null,
+    mediaResult: predict.media ?? null,
+    modalities_used: predict.modalities_used,
+
+    // Legacy convenience fields (from text model)
+    uncertainty: predict.text?.uncertainty,
+    prob_fake: predict.prob_fake,
+    prob_real: predict.prob_real,
+    top_tokens: predict.text?.top_tokens ?? [],
+    features: predict.text?.features ?? null,
+
+    // Ablation variants — only the ones the backend actually ran
     ablationData: ablation?.variants.map((v) => ({
       variant: v.variant,
       active: v.active,
       prob_fake: v.prob_fake,
       prob_real: v.prob_real,
       verdict: v.verdict,
-      is_placeholder: false, // real data only — never placeholder
+      is_placeholder: false,
     })) ?? [
-      // Fallback if ablation call failed: derive from predict result
       {
         variant: 'text_only',
         active: { text: true, image: false, social: false },
-        prob_fake: predict.prob_fake,
-        prob_real: predict.prob_real,
-        verdict: predict.verdict,
+        prob_fake: predict.text?.prob_fake ?? predict.prob_fake,
+        prob_real: predict.text?.prob_real ?? predict.prob_real,
+        verdict: predict.text?.verdict ?? predict.verdict,
         is_placeholder: false,
       },
     ],
 
-    // Attention tokens from predict (stopwords already filtered by predictor.py)
-    top_tokens: predict.top_tokens ?? [],
-
-    // Handcrafted features from preprocess_single.py
-    features: predict.features ?? null,
-
-    // Sentence-level analysis not yet available from text-only API
     sentences: [],
+    socialContext: null,
 
-    // Social context only when social modality is provided
-    socialContext: provided.has('social') ? null : null,
-
-    rawJson: {
-      predict: predict,
-      ablation: ablation,
-    },
+    rawJson: { predict, ablation },
   };
 }
 
@@ -207,28 +230,42 @@ function buildResult(
 
 export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
   return useMutation<AnalysisResult, Error, SubmitAnalysisInput>({
-    mutationFn: async ({ text, platform, imageFile, socialData }) => {
+    mutationFn: async ({ text, platform, imageFile, postUrl, mediaContext }) => {
       // Convert image to base64 if provided
       let imageBase64: string | undefined;
       if (imageFile) {
         imageBase64 = await fileToBase64(imageFile);
       }
 
-      // ── Fire both APIs in parallel ──────────────────────────────────
-      // Predict is required. Ablation failure is non-fatal.
+      // Build the unified request body (same shape for /predict and /ablation/run)
+      const body: PredictRequest = { text };
+
+      if (imageBase64) {
+        body.image = imageBase64;
+        body.caption = text; // post text is the caption for PCCS alignment
+      }
+
+      // mediaContext takes priority over URL-derived context
+      if (mediaContext && Object.keys(mediaContext).length > 0) {
+        body.media_context = mediaContext;
+      } else if (postUrl?.trim()) {
+        body.media_context = buildMediaContext(postUrl.trim(), text);
+      }
+
+      // Fire /predict and /ablation/run in parallel with identical bodies
+      // /predict is required; ablation failure is non-fatal
       const [predictSettled, ablationSettled] = await Promise.allSettled([
-        callPredict(text, imageBase64),
-        callAblationRun(text, imageBase64, socialData),
+        callPredict(body),
+        callAblationRun(body),
       ]);
 
-      // Predict must succeed
       if (predictSettled.status === 'rejected') {
         const error = predictSettled.reason;
-        const msg = typeof error === 'string' 
-          ? error 
-          : error?.message || JSON.stringify(error) || 'Prediction failed. Is FastAPI running?';
-        
-        console.error('[useAnalysis] Predict mutation failed:', error);
+        const msg =
+          typeof error === 'string'
+            ? error
+            : error?.message || JSON.stringify(error) || 'Prediction failed. Is FastAPI running?';
+        console.error('[useAnalysis] Predict failed:', error);
         throw new Error(msg);
       }
 
@@ -237,10 +274,7 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
         ablationSettled.status === 'fulfilled' ? ablationSettled.value : null;
 
       if (ablationSettled.status === 'rejected') {
-        console.warn(
-          '[useAnalysis] Ablation call failed (non-fatal):',
-          ablationSettled.reason?.message,
-        );
+        console.warn('[useAnalysis] Ablation failed (non-fatal):', ablationSettled.reason?.message);
       }
 
       return buildResult(predict, ablation, platform, text);

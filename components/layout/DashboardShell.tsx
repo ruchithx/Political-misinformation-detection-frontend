@@ -12,9 +12,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </main>
         {/* Footer rate-limit notice */}
         <div className="border-t border-border bg-background px-6 py-2">
-          <p className="text-[11px] text-muted-foreground font-mono-num">
+          {/* <p className="text-[11px] text-muted-foreground font-mono-num">
             University of Moratuwa
-          </p>
+          </p> */}
         </div>
       </div>
     </div>

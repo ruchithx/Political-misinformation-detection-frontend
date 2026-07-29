@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { InputForm } from '@/components/analysis/InputForm';
 import { ResultPanel } from '@/components/analysis/ResultPanel';
 import { LoadingDots } from '@/components/analysis/LoadingDots';
-import { useAblation } from '@/hooks/useAblation';
 import { useHistory } from '@/hooks/useHistory';
 import { useAnalysisCounter } from '@/hooks/useAnalysisCounter';
 import type { AnalysisResult, Platform } from '@/lib/types';
@@ -16,10 +15,9 @@ export default function DashboardPage() {
   const { addResult } = useHistory();
   const { increment } = useAnalysisCounter();
   const [result, setResult] = useState<AnalysisResult | null>(null);
-
   const [isPending, setIsPending] = useState(false);
+
   const { mutateAsync: runAnalysis } = useAnalysis();
-  const { mutateAsync: runAblation } = useAblation();
 
   const handleSubmit = async (
     text: string,
@@ -29,26 +27,9 @@ export default function DashboardPage() {
   ) => {
     setIsPending(true);
     try {
-      // ── SHIM: Mock Media Context from URL ──────────────────────────────
-      let socialData = undefined;
-      if (postUrl) {
-        let domain = 'web';
-        try { domain = new URL(postUrl).hostname.replace('www.', ''); } catch(e) {}
-        
-        socialData = {
-          domain_credibility_score: domain.includes('reuters') || domain.includes('apnews') || domain.includes('bbc') ? 0.95 : 0.45,
-          media_richness_score: 0.7,
-          metadata_completeness: 0.8,
-          platform: domain.includes('twitter') || domain.includes('x.com') ? 'twitter' : (domain.includes('facebook') ? 'facebook' : 'web'),
-          author_follow_count: 5000,
-          verified: domain.includes('twitter') || domain.includes('facebook') ? 1 : 0
-        };
-      }
-
-      const analysisRes = await runAnalysis({ text, platform, imageFile, socialData });
-
-      setResult(analysisRes);
-      addResult(analysisRes);
+      const analysisResult = await runAnalysis({ text, platform, imageFile, postUrl });
+      setResult(analysisResult);
+      addResult(analysisResult);
       increment();
     } catch (e) {
       console.error(e);
@@ -71,12 +52,6 @@ export default function DashboardPage() {
           </p>
         </div>
         <InputForm onSubmit={handleSubmit} isLoading={isPending} />
-
-        {/* Footer/disclaimer */}
-        {/* <div className="mt-auto pt-6 text-xs text-muted-foreground">
-          Models used: BERT + ResNet-50 + GAT (Early Fusion). Predictions are
-          probabilities, not absolute facts.
-        </div> */}
       </div>
 
       {/* Right panel */}
