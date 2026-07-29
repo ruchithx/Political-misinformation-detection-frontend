@@ -9,6 +9,7 @@ import { useHistory } from '@/hooks/useHistory';
 import { useAnalysisCounter } from '@/hooks/useAnalysisCounter';
 import type { AnalysisResult, Platform } from '@/lib/types';
 import { useAnalysis } from '@/hooks/useAnalysis';
+import { buildMediaFeatures } from '@/lib/api/formatters';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -27,9 +28,17 @@ export default function DashboardPage() {
   ) => {
     setIsPending(true);
     try {
-      const analysisResult = await runAnalysis({ text, platform, imageFile, postUrl });
-      setResult(analysisResult);
-      addResult(analysisResult);
+      const socialData = buildMediaFeatures(text, platform, postUrl);
+      console.log('[DashboardPage] Before mutation — socialData payload:', socialData);
+      const analysisRes = await runAnalysis({
+        text,
+        platform,
+        imageFile,
+        socialData,
+      });
+
+      setResult(analysisRes);
+      addResult(analysisRes);
       increment();
     } catch (e) {
       console.error(e);

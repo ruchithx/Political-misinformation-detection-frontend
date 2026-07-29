@@ -1,14 +1,7 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
-import type {
-  AnalysisResult,
-  Platform,
-  TextModelResult,
-  ImageModelResult,
-  MediaModelResult,
-  AblationCondition,
-} from '@/lib/types';
+import type { AnalysisResult, Platform, MediaContextResult } from '@/lib/types';
 import { fileToBase64 } from '@/lib/api/formatters';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
@@ -144,13 +137,35 @@ async function callAblationRun(body: PredictRequest): Promise<AblationRunRespons
   return res.json();
 }
 
-// ── Map API response → AnalysisResult ────────────────────────────────
+async function callMediaPredict(
+  socialData: Record<string, unknown>,
+): Promise<MediaContextResult> {
+  console.log('[callMediaPredict] Calling POST /media/predict');
+  console.log('[callMediaPredict] media_data payload:', JSON.stringify(socialData));
+  const res = await fetch(`${API_BASE}/media/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ media_data: socialData }),
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      err.detail ?? err.error ?? `Media predict API error: ${res.status}`,
+    );
+  }
+  return res.json();
+}
+
+// ── Map API responses → AnalysisResult ───────────────────────────────
 
 function buildResult(
   predict: UnifiedPredictResponse,
   ablation: AblationRunResponse | null,
   platform: Platform,
   inputText: string,
+  mediaContext: MediaContextResult | null,
 ): AnalysisResult {
   const modalities = new Set(predict.modalities_used ?? ['text']);
 
@@ -222,7 +237,16 @@ function buildResult(
     sentences: [],
     socialContext: null,
 
-    rawJson: { predict, ablation },
+    // Social context only when social modality is provided
+    socialContext: provided.has('social') ? null : null,
+
+    rawJson: {
+      predict: predict,
+      ablation: ablation,
+      mediaContext: mediaContext,
+    },
+
+    mediaContextResult: mediaContext,
   };
 }
 
@@ -237,26 +261,14 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
         imageBase64 = await fileToBase64(imageFile);
       }
 
-      // Build the unified request body (same shape for /predict and /ablation/run)
-      const body: PredictRequest = { text };
-
-      if (imageBase64) {
-        body.image = imageBase64;
-        body.caption = text; // post text is the caption for PCCS alignment
-      }
-
-      // mediaContext takes priority over URL-derived context
-      if (mediaContext && Object.keys(mediaContext).length > 0) {
-        body.media_context = mediaContext;
-      } else if (postUrl?.trim()) {
-        body.media_context = buildMediaContext(postUrl.trim(), text);
-      }
-
-      // Fire /predict and /ablation/run in parallel with identical bodies
-      // /predict is required; ablation failure is non-fatal
-      const [predictSettled, ablationSettled] = await Promise.allSettled([
-        callPredict(body),
-        callAblationRun(body),
+      // ── Fire all APIs in parallel ──────────────────────────────────
+      // Predict is required. Ablation + media failures are non-fatal.
+      console.log('[useAnalysis] Before mutation — socialData provided:', !!socialData);
+      console.log('[useAnalysis] socialData:', JSON.stringify(socialData));
+      const [predictSettled, ablationSettled, mediaSettled] = await Promise.allSettled([
+        callPredict(text, imageBase64),
+        callAblationRun(text, imageBase64, socialData),
+        callMediaPredict((socialData ?? {}) as Record<string, unknown>),
       ]);
 
       if (predictSettled.status === 'rejected') {
@@ -277,7 +289,24 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
         console.warn('[useAnalysis] Ablation failed (non-fatal):', ablationSettled.reason?.message);
       }
 
-      return buildResult(predict, ablation, platform, text);
+      const mediaContext: MediaContextResult | null =
+        mediaSettled.status === 'fulfilled'
+          ? mediaSettled.value
+          : null;
+
+      if (mediaSettled.status === 'rejected') {
+        console.warn(
+          '[useAnalysis] Media predict call failed (non-fatal):',
+          mediaSettled.reason?.message,
+        );
+        console.warn(
+          '[useAnalysis] Check: is the FeatureAttentionMLP checkpoint loaded? ' +
+          '(experiments/feature_attention_mlp/checkpoints/feature_attention_mlp.pt ' +
+          'AND outputs/checkpoints/liar_only/liar_context_metadata.pkl must both exist)',
+        );
+      }
+
+      return buildResult(predict, ablation, platform, text, mediaContext);
     },
 
     onSuccess,

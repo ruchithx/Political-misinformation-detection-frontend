@@ -4,6 +4,7 @@ import { InputForm } from '@/components/analysis/InputForm';
 import { useRouter } from 'next/navigation';
 import { useHistory } from '@/hooks/useHistory';
 import { useAnalysis } from '@/hooks/useAnalysis';
+import { buildMediaFeatures } from '@/lib/api/formatters';
 
 export default function AnalyzePage() {
   const router = useRouter();
@@ -22,7 +23,14 @@ export default function AnalyzePage() {
       <InputForm
         isLoading={isPending}
         onSubmit={(text, platform, imageFile, postUrl) => {
-          mutate({ text, platform, imageFile, postUrl });
+          const socialData = buildMediaFeatures(text, platform, postUrl);
+          console.log('[AnalyzePage] Before mutation — socialData payload:', socialData);
+          mutate({
+            text,
+            platform,
+            imageFile,
+            socialData,
+          });
         }}
       />
     </section>

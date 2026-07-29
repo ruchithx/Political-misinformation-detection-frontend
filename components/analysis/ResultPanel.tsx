@@ -6,6 +6,7 @@ import { ModalityBars } from './ModalityBars';
 import { ConfidenceGauge } from './ConfidenceGauge';
 import { SentenceHighlighter } from './SentenceHighlighter';
 import { FeatureMetricsCard } from './FeatureMetricsCard';
+import { MediaContextCard } from './MediaContextCard';
 import type { AnalysisResult } from '@/lib/types';
 
 interface ResultPanelProps {
@@ -163,8 +164,10 @@ export function ResultPanel({ result }: ResultPanelProps) {
             </div>
           )}
 
-          {/* Text model features */}
-          {result.features && <FeatureMetricsCard features={result.features} />}
+          {/* Media Context Prediction (from /media/predict) */}
+          {result.mediaContextResult && (
+            <MediaContextCard result={result.mediaContextResult} />
+          )}
 
           <ConfidenceGauge value={result.confidence} />
 
