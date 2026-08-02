@@ -34,6 +34,7 @@ export default function DashboardPage() {
         text,
         platform,
         imageFile,
+        postUrl,
         socialData,
       });
 

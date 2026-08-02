@@ -29,6 +29,7 @@ export default function AnalyzePage() {
             text,
             platform,
             imageFile,
+            postUrl,
             socialData,
           });
         }}
