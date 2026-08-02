@@ -1,7 +1,14 @@
 'use client';
 
 import { useMutation } from '@tanstack/react-query';
-import type { AnalysisResult, Platform, MediaContextResult } from '@/lib/types';
+import type {
+  AnalysisResult,
+  Platform,
+  MediaContextResult,
+  TextModelResult,
+  ImageModelResult,
+  MediaModelResult,
+} from '@/lib/types';
 import { fileToBase64 } from '@/lib/api/formatters';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000';
@@ -57,6 +64,7 @@ export interface SubmitAnalysisInput {
   imageFile?: File | null;
   postUrl?: string;
   mediaContext?: Record<string, unknown>;
+  socialData?: Record<string, unknown>;
 }
 
 interface UseAnalysisArgs {
@@ -215,37 +223,92 @@ function buildResult(
     top_tokens: predict.text?.top_tokens ?? [],
     features: predict.text?.features ?? null,
 
-    // Ablation variants — only the ones the backend actually ran
-    ablationData: ablation?.variants.map((v) => ({
-      variant: v.variant,
-      active: v.active,
-      prob_fake: v.prob_fake,
-      prob_real: v.prob_real,
-      verdict: v.verdict,
-      is_placeholder: false,
-    })) ?? [
-      {
-        variant: 'text_only',
-        active: { text: true, image: false, social: false },
-        prob_fake: predict.text?.prob_fake ?? predict.prob_fake,
-        prob_real: predict.text?.prob_real ?? predict.prob_real,
-        verdict: predict.text?.verdict ?? predict.verdict,
+    // Ablation variants — from ablation API, supplemented with per-model predict scores
+    // when the ablation endpoint returned only text variants or failed entirely.
+    ablationData: (() => {
+      const fromAblation = ablation?.variants.map((v) => ({
+        variant: v.variant,
+        active: v.active,
+        prob_fake: v.prob_fake,
+        prob_real: v.prob_real,
+        verdict: v.verdict,
         is_placeholder: false,
-      },
-    ],
+      })) ?? [];
+
+      const seen = new Set(fromAblation.map((v) => v.variant));
+      const entries = [...fromAblation];
+
+      if (!seen.has('text_only') && predict.text) {
+        entries.push({
+          variant: 'text_only',
+          active: { text: true, image: false, social: false },
+          prob_fake: predict.text.prob_fake,
+          prob_real: predict.text.prob_real,
+          verdict: predict.text.verdict,
+          is_placeholder: false,
+        });
+      }
+      if (!seen.has('image_only') && predict.image) {
+        entries.push({
+          variant: 'image_only',
+          active: { text: false, image: true, social: false },
+          prob_fake: predict.image.prob_fake,
+          prob_real: predict.image.prob_real,
+          verdict: predict.image.verdict,
+          is_placeholder: false,
+        });
+      }
+      if (!seen.has('social_only') && predict.media) {
+        entries.push({
+          variant: 'social_only',
+          active: { text: false, image: false, social: true },
+          prob_fake: predict.media.prob_fake,
+          prob_real: predict.media.prob_real,
+          verdict: predict.media.verdict,
+          is_placeholder: false,
+        });
+      }
+
+      // Add a fusion entry when multiple individual models are present but no combined variant exists
+      const hasCombined = ['text_image', 'text_social', 'full_multimodal'].some((v) => seen.has(v));
+      if (!hasCombined && entries.length > 1) {
+        const fusionVariant =
+          predict.image && predict.media ? 'full_multimodal' :
+          predict.image ? 'text_image' :
+          predict.media ? 'text_social' : null;
+        if (fusionVariant) {
+          entries.push({
+            variant: fusionVariant,
+            active: { text: true, image: !!predict.image, social: !!predict.media },
+            prob_fake: predict.prob_fake,
+            prob_real: predict.prob_real,
+            verdict: predict.verdict,
+            is_placeholder: false,
+          });
+        }
+      }
+
+      if (entries.length === 0) {
+        entries.push({
+          variant: 'text_only',
+          active: { text: true, image: false, social: false },
+          prob_fake: predict.text?.prob_fake ?? predict.prob_fake,
+          prob_real: predict.text?.prob_real ?? predict.prob_real,
+          verdict: predict.text?.verdict ?? predict.verdict,
+          is_placeholder: false,
+        });
+      }
+
+      return entries;
+    })(),
 
     sentences: [],
     socialContext: null,
-
-    // Social context only when social modality is provided
-    socialContext: provided.has('social') ? null : null,
-
     rawJson: {
-      predict: predict,
-      ablation: ablation,
-      mediaContext: mediaContext,
+      predict,
+      ablation,
+      mediaContext,
     },
-
     mediaContextResult: mediaContext,
   };
 }
@@ -254,21 +317,29 @@ function buildResult(
 
 export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
   return useMutation<AnalysisResult, Error, SubmitAnalysisInput>({
-    mutationFn: async ({ text, platform, imageFile, postUrl, mediaContext }) => {
+    mutationFn: async ({ text, platform, imageFile, postUrl, mediaContext, socialData }) => {
       // Convert image to base64 if provided
       let imageBase64: string | undefined;
       if (imageFile) {
         imageBase64 = await fileToBase64(imageFile);
       }
 
+      const resolvedMediaContext = socialData ?? mediaContext ?? (postUrl ? buildMediaContext(postUrl, text) : null);
+
+      const predictBody: PredictRequest = {
+        text,
+        image: imageBase64 ?? null,
+        media_context: resolvedMediaContext ?? null,
+      };
+
       // ── Fire all APIs in parallel ──────────────────────────────────
       // Predict is required. Ablation + media failures are non-fatal.
-      console.log('[useAnalysis] Before mutation — socialData provided:', !!socialData);
-      console.log('[useAnalysis] socialData:', JSON.stringify(socialData));
+      console.log('[useAnalysis] media context provided:', !!resolvedMediaContext);
+      console.log('[useAnalysis] media context payload:', JSON.stringify(resolvedMediaContext));
       const [predictSettled, ablationSettled, mediaSettled] = await Promise.allSettled([
-        callPredict(text, imageBase64),
-        callAblationRun(text, imageBase64, socialData),
-        callMediaPredict((socialData ?? {}) as Record<string, unknown>),
+        callPredict(predictBody),
+        callAblationRun(predictBody),
+        callMediaPredict((resolvedMediaContext ?? {}) as Record<string, unknown>),
       ]);
 
       if (predictSettled.status === 'rejected') {
@@ -289,7 +360,7 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
         console.warn('[useAnalysis] Ablation failed (non-fatal):', ablationSettled.reason?.message);
       }
 
-      const mediaContext: MediaContextResult | null =
+      const mediaPredictionResult: MediaContextResult | null =
         mediaSettled.status === 'fulfilled'
           ? mediaSettled.value
           : null;
@@ -306,7 +377,7 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
         );
       }
 
-      return buildResult(predict, ablation, platform, text, mediaContext);
+      return buildResult(predict, ablation, platform, text, mediaPredictionResult);
     },
 
     onSuccess,

@@ -109,6 +109,7 @@ export interface AnalysisResult {
   socialContext: SocialContext | null;
   ablationData?: AblationCondition[];
   mediaContextResult?: MediaContextResult | null;
+  rawJson?: Record<string, unknown>;
 }
 
 // ─── Media Context prediction types ─────────────────────────────────────────
