@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { InputForm } from '@/components/analysis/InputForm';
 import { ResultPanel } from '@/components/analysis/ResultPanel';
-import { LoadingDots } from '@/components/analysis/LoadingDots';
+import { AnalysisSkeleton } from '@/components/analysis/AnalysisSkeleton';
 import { useHistory } from '@/hooks/useHistory';
 import { useAnalysisCounter } from '@/hooks/useAnalysisCounter';
 import type { AnalysisResult, Platform } from '@/lib/types';
@@ -67,8 +67,8 @@ export default function DashboardPage() {
       {/* Right panel */}
       <div className="bg-muted/10 p-6 overflow-y-auto relative min-h-[400px]">
         {isPending ? (
-          <div className="flex h-full min-h-[400px] items-center justify-center rounded-2xl border border-dashed border-border bg-card/50">
-            <LoadingDots />
+          <div className="rounded-2xl border border-dashed border-border bg-card/50 p-6">
+            <AnalysisSkeleton />
           </div>
         ) : result ? (
           <div className="space-y-4 pb-20">

@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Upload, X } from 'lucide-react';
+import { Upload, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Platform } from '@/lib/types';
 
@@ -186,7 +186,14 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
         )}
         style={{ fontFamily: 'var(--font-heading)' }}
       >
-        {isLoading ? 'Analyzing…' : 'Run Analysis →'}
+        {isLoading ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Analyzing…</span>
+          </span>
+        ) : (
+          'Run Analysis →'
+        )}
       </motion.button>
 
       {/* Disclaimer */}

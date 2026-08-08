@@ -18,6 +18,16 @@ const MODEL_VERDICT_COLOR: Record<string, string> = {
   REAL: '#1A7A4A',
 };
 
+const containerVariants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08 } },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+};
+
 export function ResultPanel({ result }: ResultPanelProps) {
   const shouldReduceMotion = useReducedMotion();
 
@@ -26,23 +36,25 @@ export function ResultPanel({ result }: ResultPanelProps) {
       {result && (
         <motion.div
           key={result.id}
-          initial={shouldReduceMotion ? {} : { opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          variants={shouldReduceMotion ? undefined : containerVariants}
+          initial={shouldReduceMotion ? { opacity: 0 } : 'hidden'}
+          animate={shouldReduceMotion ? { opacity: 1 } : 'show'}
           exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
           className="space-y-4"
         >
           {/* Overall verdict */}
-          <VerdictCard
-            verdict={result.verdict}
-            confidence={result.confidence}
-            platform={result.platform}
-            timestamp={result.timestamp}
-          />
+          <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+            <VerdictCard
+              verdict={result.verdict}
+              confidence={result.confidence}
+              platform={result.platform}
+              timestamp={result.timestamp}
+            />
+          </motion.div>
 
           {/* Per-model result cards */}
           {(result.textResult || result.imageResult || result.mediaResult) && (
-            <div className="space-y-3">
+            <motion.div variants={shouldReduceMotion ? undefined : itemVariants} className="space-y-3">
               <h3
                 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground"
                 style={{ fontFamily: 'var(--font-heading)' }}
@@ -88,91 +100,103 @@ export function ResultPanel({ result }: ResultPanelProps) {
                   />
                 )}
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Modality bars */}
           {(result.textScore != null ||
             result.imageScore != null ||
             result.socialScore != null) && (
-            <ModalityBars
-              textScore={result.textScore}
-              imageScore={result.imageScore}
-              socialScore={result.socialScore}
-              fusionScore={result.fusionScore}
-            />
+            <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+              <ModalityBars
+                textScore={result.textScore}
+                imageScore={result.imageScore}
+                socialScore={result.socialScore}
+                fusionScore={result.fusionScore}
+              />
+            </motion.div>
           )}
 
           {/* Media context top signals */}
           {result.mediaResult?.top_signals && result.mediaResult.top_signals.length > 0 && (
-            <div className="rounded-xl border bg-card p-5">
-              <h3
-                className="mb-3 text-sm font-semibold text-foreground"
-                style={{ fontFamily: 'var(--font-heading)' }}
-              >
-                Media Context Signals
-              </h3>
-              <div className="space-y-2.5">
-                {result.mediaResult.top_signals.map((sig) => (
-                  <div key={sig.feature}>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="font-medium text-muted-foreground">
-                        {sig.feature.replace(/_/g, ' ')}
-                      </span>
-                      <span className="font-mono-num text-[#0D9488] font-semibold">
-                        {(sig.attention * 100).toFixed(1)}% attn
-                      </span>
+            <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+              <div className="rounded-xl border bg-card p-5">
+                <h3
+                  className="mb-3 text-sm font-semibold text-foreground"
+                  style={{ fontFamily: 'var(--font-heading)' }}
+                >
+                  Media Context Signals
+                </h3>
+                <div className="space-y-2.5">
+                  {result.mediaResult.top_signals.map((sig) => (
+                    <div key={sig.feature}>
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span className="font-medium text-muted-foreground">
+                          {sig.feature.replace(/_/g, ' ')}
+                        </span>
+                        <span className="font-mono-num text-[#0D9488] font-semibold">
+                          {(sig.attention * 100).toFixed(1)}% attn
+                        </span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-[#0D9488] transition-all duration-700"
+                          style={{ width: `${sig.attention * 100}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-[#0D9488] transition-all duration-700"
-                        style={{ width: `${sig.attention * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Image PCCS alignment */}
           {result.imageResult?.pccs_score != null && (
-            <div className="rounded-xl border bg-card p-5">
-              <h3
-                className="mb-3 text-sm font-semibold text-foreground"
-                style={{ fontFamily: 'var(--font-heading)' }}
-              >
-                Image Semantic Alignment (PCCS)
-              </h3>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  OCR text ↔ Caption alignment
-                </span>
-                <span className="font-mono-num text-sm font-semibold text-[#8B5CF6]">
-                  {(result.imageResult.pccs_score * 100).toFixed(1)}%
-                </span>
+            <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+              <div className="rounded-xl border bg-card p-5">
+                <h3
+                  className="mb-3 text-sm font-semibold text-foreground"
+                  style={{ fontFamily: 'var(--font-heading)' }}
+                >
+                  Image Semantic Alignment (PCCS)
+                </h3>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    OCR text ↔ Caption alignment
+                  </span>
+                  <span className="font-mono-num text-sm font-semibold text-[#8B5CF6]">
+                    {(result.imageResult.pccs_score * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-[#8B5CF6] transition-all duration-700"
+                    style={{ width: `${result.imageResult.pccs_score * 100}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-[10px] text-muted-foreground/60 leading-relaxed">
+                  Low alignment may indicate manipulated or misleading imagery.
+                </p>
               </div>
-              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-[#8B5CF6] transition-all duration-700"
-                  style={{ width: `${result.imageResult.pccs_score * 100}%` }}
-                />
-              </div>
-              <p className="mt-2 text-[10px] text-muted-foreground/60 leading-relaxed">
-                Low alignment may indicate manipulated or misleading imagery.
-              </p>
-            </div>
+            </motion.div>
           )}
 
           {/* Media Context Prediction (from /media/predict) */}
           {result.mediaContextResult && (
-            <MediaContextCard result={result.mediaContextResult} />
+            <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+              <MediaContextCard result={result.mediaContextResult} />
+            </motion.div>
           )}
 
-          <ConfidenceGauge value={result.confidence} />
+          <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+            <ConfidenceGauge value={result.confidence} />
+          </motion.div>
 
           {result.sentences && result.sentences.length > 0 && (
-            <SentenceHighlighter sentences={result.sentences} />
+            <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+              <SentenceHighlighter sentences={result.sentences} />
+            </motion.div>
           )}
         </motion.div>
       )}
