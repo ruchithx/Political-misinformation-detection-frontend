@@ -12,7 +12,7 @@ export function LoadingDots() {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-12">
+    <div className="flex flex-col items-center justify-center gap-4 py-6">
       <div className="flex items-center gap-3">
         {dots.map((dot, i) => (
           <motion.span
