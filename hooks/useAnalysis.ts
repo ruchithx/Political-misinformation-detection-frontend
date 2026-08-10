@@ -329,9 +329,9 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
       const predictBody: PredictRequest = {
         text,
         image: imageBase64 ?? null,
+        caption: text,
         media_context: resolvedMediaContext ?? null,
       };
-
       // ── Fire all APIs in parallel ──────────────────────────────────
       // Predict is required. Ablation + media failures are non-fatal.
       console.log('[useAnalysis] media context provided:', !!resolvedMediaContext);
