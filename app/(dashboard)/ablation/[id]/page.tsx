@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import { VerdictCard } from '@/components/analysis/VerdictCard';
 import { ModalityBars } from '@/components/analysis/ModalityBars';
-import { ConfidenceGauge } from '@/components/analysis/ConfidenceGauge';
 import { SentenceHighlighter } from '@/components/analysis/SentenceHighlighter';
 import { TopTokensCard } from '@/components/analysis/TopTokensCard';
 import { FeatureMetricsCard } from '@/components/analysis/FeatureMetricsCard';
@@ -181,12 +180,7 @@ export default function ResultDetailPage({
           borderColor: `${verdictCfg.color}40`,
         }}
       >
-        <VerdictCard
-          verdict={result.verdict}
-          confidence={result.confidence}
-          platform={result.platform}
-          timestamp={result.timestamp}
-        />
+        <VerdictCard verdict={result.verdict} />
       </div>
 
       {/* Modality input badges — shows what was analysed */}
@@ -260,11 +254,8 @@ export default function ResultDetailPage({
         </div>
       )}
 
-      {/* Modality bars + confidence gauge */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ModalityBars {...modalityScores} />
-        <ConfidenceGauge value={result.confidence} />
-      </div>
+      {/* Modality bars */}
+      <ModalityBars {...modalityScores} />
 
       {/* Attention tokens */}
       {/* {result.top_tokens && result.top_tokens.length > 0 && (

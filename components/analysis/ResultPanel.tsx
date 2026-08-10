@@ -44,12 +44,7 @@ export function ResultPanel({ result }: ResultPanelProps) {
         >
           {/* Overall verdict */}
           <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
-            <VerdictCard
-              verdict={result.verdict}
-              confidence={result.confidence}
-              platform={result.platform}
-              timestamp={result.timestamp}
-            />
+            <VerdictCard verdict={result.verdict} />
           </motion.div>
 
           {/* Per-model result cards */}

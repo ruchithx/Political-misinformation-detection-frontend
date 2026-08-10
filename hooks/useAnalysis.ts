@@ -177,8 +177,13 @@ function buildResult(
 ): AnalysisResult {
   const modalities = new Set(predict.modalities_used ?? ['text']);
 
+  const anyModelFake =
+    predict.text?.verdict?.toUpperCase() === 'FAKE' ||
+    predict.image?.verdict?.toUpperCase() === 'FAKE' ||
+    predict.media?.verdict?.toUpperCase() === 'FAKE';
+
   const verdict: AnalysisResult['verdict'] =
-    predict.prob_fake >= 0.5 ? 'MISINFORMATION' : 'CREDIBLE';
+    anyModelFake || predict.prob_fake >= 0.5 ? 'MISINFORMATION' : 'CREDIBLE';
 
   // Ablation variant score helper
   const variantScore = (name: string): number | null => {

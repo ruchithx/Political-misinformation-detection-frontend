@@ -57,10 +57,6 @@ export function HistoryItem({ result, index }: HistoryItemProps) {
             <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] text-muted-foreground capitalize">
               {platformCfg.label}
             </span>
-            {/* Confidence */}
-            <span className="font-mono-num text-[11px] font-semibold" style={{ color: verdictCfg.color }}>
-              {result.confidence.toFixed(1)}% confidence
-            </span>
             {/* Timestamp */}
             <span className="font-mono-num text-[11px] text-muted-foreground">{displayTs}</span>
           </div>
