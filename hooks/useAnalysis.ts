@@ -137,11 +137,27 @@ async function callMediaPredict(
 // so different source URLs produce visibly different Media Context predictions.
 // This is NOT a research-grade result and must not be used to generate or
 // report research evaluation results — it is a client-side display adjustment.
+//
+// Temporary band requirement: source credibility 0.1–0.5 must display as a
+// 70–75% fake result, and 0.6–0.9 must display as 20–30%. Outside those two
+// bands there's no specified target, so fall back to the original 50/50 blend.
+function creditScoreToFakeFraction(domainCredibilityScore: number, originalFake: number): number {
+  if (domainCredibilityScore >= 0.1 && domainCredibilityScore <= 0.5) {
+    const t = (domainCredibilityScore - 0.1) / (0.5 - 0.1);
+    return 0.75 - t * (0.75 - 0.70); // 75% at the low-credibility end, down to 70%
+  }
+  if (domainCredibilityScore >= 0.6 && domainCredibilityScore <= 0.9) {
+    const t = (domainCredibilityScore - 0.6) / (0.9 - 0.6);
+    return 0.30 - t * (0.30 - 0.20); // 30% at the low end of this band, down to 20%
+  }
+  const heuristicFake = 1 - domainCredibilityScore;
+  return Math.min(1, Math.max(0, 0.5 * originalFake + 0.5 * heuristicFake));
+}
+
 function applyDemoCredibilityOverride<
   T extends { prob_fake: number; prob_real: number; verdict: string },
 >(original: T, domainCredibilityScore: number): T {
-  const heuristicFake = 1 - domainCredibilityScore;
-  const blendedFake = Math.min(1, Math.max(0, 0.5 * original.prob_fake + 0.5 * heuristicFake));
+  const blendedFake = creditScoreToFakeFraction(domainCredibilityScore, original.prob_fake);
   return {
     ...original,
     prob_fake: blendedFake,
