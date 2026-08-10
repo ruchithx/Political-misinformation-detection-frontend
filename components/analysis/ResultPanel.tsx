@@ -3,10 +3,8 @@
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { VerdictCard } from './VerdictCard';
 import { ModalityBars } from './ModalityBars';
-import { ConfidenceGauge } from './ConfidenceGauge';
 import { SentenceHighlighter } from './SentenceHighlighter';
 import { FeatureMetricsCard } from './FeatureMetricsCard';
-import { MediaContextCard } from './MediaContextCard';
 import type { AnalysisResult } from '@/lib/types';
 
 interface ResultPanelProps {
@@ -112,81 +110,12 @@ export function ResultPanel({ result }: ResultPanelProps) {
             </motion.div>
           )}
 
-          {/* Media context top signals */}
-          {result.mediaResult?.top_signals && result.mediaResult.top_signals.length > 0 && (
+
+          {result.features && (
             <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
-              <div className="rounded-xl border bg-card p-5">
-                <h3
-                  className="mb-3 text-sm font-semibold text-foreground"
-                  style={{ fontFamily: 'var(--font-heading)' }}
-                >
-                  Media Context Signals
-                </h3>
-                <div className="space-y-2.5">
-                  {result.mediaResult.top_signals.map((sig) => (
-                    <div key={sig.feature}>
-                      <div className="mb-1 flex items-center justify-between text-xs">
-                        <span className="font-medium text-muted-foreground">
-                          {sig.feature.replace(/_/g, ' ')}
-                        </span>
-                        <span className="font-mono-num text-[#0D9488] font-semibold">
-                          {(sig.attention * 100).toFixed(1)}% attn
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-[#0D9488] transition-all duration-700"
-                          style={{ width: `${sig.attention * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <FeatureMetricsCard features={result.features} />
             </motion.div>
           )}
-
-          {/* Image PCCS alignment */}
-          {result.imageResult?.pccs_score != null && (
-            <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
-              <div className="rounded-xl border bg-card p-5">
-                <h3
-                  className="mb-3 text-sm font-semibold text-foreground"
-                  style={{ fontFamily: 'var(--font-heading)' }}
-                >
-                  Image Semantic Alignment (PCCS)
-                </h3>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    OCR text ↔ Caption alignment
-                  </span>
-                  <span className="font-mono-num text-sm font-semibold text-[#8B5CF6]">
-                    {(result.imageResult.pccs_score * 100).toFixed(1)}%
-                  </span>
-                </div>
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-[#8B5CF6] transition-all duration-700"
-                    style={{ width: `${result.imageResult.pccs_score * 100}%` }}
-                  />
-                </div>
-                <p className="mt-2 text-[10px] text-muted-foreground/60 leading-relaxed">
-                  Low alignment may indicate manipulated or misleading imagery.
-                </p>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Media Context Prediction (from /media/predict) */}
-          {result.mediaContextResult && (
-            <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
-              <MediaContextCard result={result.mediaContextResult} />
-            </motion.div>
-          )}
-
-          <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
-            <ConfidenceGauge value={result.confidence} />
-          </motion.div>
 
           {result.sentences && result.sentences.length > 0 && (
             <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>

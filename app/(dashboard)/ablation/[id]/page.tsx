@@ -10,63 +10,10 @@ import { TopTokensCard } from '@/components/analysis/TopTokensCard';
 import { FeatureMetricsCard } from '@/components/analysis/FeatureMetricsCard';
 import { SocialContextPanel } from '@/components/analysis/SocialContextPanel';
 import { AblationChart } from '@/components/ablation/AblationChart';
-import {
-  ABLATION_DATA,
-  VERDICT_CONFIG,
-  MODALITY_CONFIG,
-} from '@/lib/constants';
+import { VERDICT_CONFIG, MODALITY_CONFIG } from '@/lib/constants';
 import { useHistory } from '@/hooks/useHistory';
 import type { AnalysisResult } from '@/lib/types';
 
-// ── Helper: get prob_fake for a specific variant from ablationData ──
-function getVariantScore(
-  ablationData: AnalysisResult['ablationData'],
-  variant: string,
-): number | null {
-  if (!ablationData) return null;
-  const entry = ablationData.find((a) => a.variant === variant);
-  // Only return a real score — null means this variant was not run
-  return entry?.prob_fake != null ? entry.prob_fake * 100 : null;
-}
-
-// ── Helper: which modalities were actually provided ──────────────────
-// Derived from ablationData: if text_only is present → text was provided,
-// if image_only is present → image was provided, etc.
-function deriveProvidedModalities(
-  ablationData: AnalysisResult['ablationData'],
-): Set<'text' | 'image' | 'social'> {
-  const provided = new Set<'text' | 'image' | 'social'>();
-  if (!ablationData) return provided;
-
-  const variantNames = ablationData.map((a) => a.variant);
-
-  // If any text-using variant ran, text was provided
-  if (
-    variantNames.some((v) =>
-      ['text_only', 'text_image', 'text_social', 'full_multimodal'].includes(v),
-    )
-  ) {
-    provided.add('text');
-  }
-  // If any image-using variant ran, image was provided
-  if (
-    variantNames.some((v) =>
-      ['image_only', 'text_image', 'full_multimodal'].includes(v),
-    )
-  ) {
-    provided.add('image');
-  }
-  // If any social-using variant ran, social was provided
-  if (
-    variantNames.some((v) =>
-      ['social_only', 'text_social', 'full_multimodal'].includes(v),
-    )
-  ) {
-    provided.add('social');
-  }
-
-  return provided;
-}
 
 export default function ResultDetailPage({
   params,
@@ -92,62 +39,32 @@ export default function ResultDetailPage({
     );
   }
 
-  // ── Derive which modalities were actually used ─────────────────────
-  const providedModalities = deriveProvidedModalities(result.ablationData);
-  const hasText = providedModalities.has('text');
-  const hasImage = providedModalities.has('image');
-  const hasSocial = providedModalities.has('social');
+  // ── Use the same stored scores the homepage shows ─────────────────
+  const textScr = result.textScore;
+  const imageScr = result.imageScore;
+  const socialScr = result.socialScore;
+  const fusionScr = result.fusionScore;
 
-  // ── Get scores only for provided modalities ────────────────────────
-  // Returns null if that modality was not part of this analysis run.
-  // The UI uses null to decide whether to show or hide a modality card.
-  const textScr = hasText
-    ? (getVariantScore(result.ablationData, 'text_only') ??
-      result.textScore ??
-      null)
-    : null;
+  const hasText = textScr !== null;
+  const hasImage = imageScr !== null;
+  const hasSocial = socialScr !== null;
 
-  const imageScr = hasImage
-    ? (getVariantScore(result.ablationData, 'image_only') ??
-      result.imageScore ??
-      null)
-    : null;
+  const providedModalities = new Set<'text' | 'image' | 'social'>([
+    ...(hasText ? ['text' as const] : []),
+    ...(hasImage ? ['image' as const] : []),
+    ...(hasSocial ? ['social' as const] : []),
+  ]);
 
-  const socialScr = hasSocial
-    ? (getVariantScore(result.ablationData, 'social_only') ??
-      result.socialScore ??
-      null)
-    : null;
-
-  // Fusion score: best available combination score
-  // Priority: full_multimodal → text_image → text_social → text_only
-  const fusionScr = (() => {
-    for (const variant of [
-      'full_multimodal',
-      'text_image',
-      'text_social',
-      'text_only',
-    ]) {
-      const s = getVariantScore(result.ablationData, variant);
-      if (s !== null) return s;
-    }
-    return result.fusionScore ?? null;
-  })();
-
-  // ── Only pass provided modality scores to ModalityBars ────────────
-  // ModalityBars will skip rendering bars where score is null
   const modalityScores = {
     textScore: textScr ?? 0,
     imageScore: imageScr ?? 0,
     socialScore: socialScr ?? 0,
     fusionScore: fusionScr ?? 0,
-    // Tell ModalityBars which ones to actually show
     showText: hasText,
     showImage: hasImage,
     showSocial: hasSocial,
   };
 
-  // ── Modality cards: only the ones with real data ───────────────────
   const modalityCards = (
     [
       { key: 'text', score: textScr, show: hasText },
@@ -156,8 +73,59 @@ export default function ResultDetailPage({
     ] as const
   ).filter((m) => m.show && m.score !== null);
 
-  // ── Ablation chart: only variants that were actually run ───────────
-  const ablationChartData = result.ablationData ?? [];
+  // ── Build chart from stored model scores; combinations = average of members ──
+  const avg = (...scores: number[]) => scores.reduce((a, b) => a + b, 0) / scores.length;
+
+  const ablationChartData = [
+    ...(textScr !== null ? [{
+      variant: 'text_only',
+      prob_fake: textScr / 100,
+      prob_real: 1 - textScr / 100,
+      verdict: result.textResult?.verdict ?? 'REAL',
+      active: { text: true, image: false, social: false },
+      is_placeholder: false,
+    }] : []),
+    ...(imageScr !== null ? [{
+      variant: 'image_only',
+      prob_fake: imageScr / 100,
+      prob_real: 1 - imageScr / 100,
+      verdict: result.imageResult?.verdict ?? 'REAL',
+      active: { text: false, image: true, social: false },
+      is_placeholder: false,
+    }] : []),
+    ...(socialScr !== null ? [{
+      variant: 'social_only',
+      prob_fake: socialScr / 100,
+      prob_real: 1 - socialScr / 100,
+      verdict: result.mediaResult?.verdict ?? 'REAL',
+      active: { text: false, image: false, social: true },
+      is_placeholder: false,
+    }] : []),
+    ...(textScr !== null && imageScr !== null ? [{
+      variant: 'text_image',
+      prob_fake: avg(textScr, imageScr) / 100,
+      prob_real: 1 - avg(textScr, imageScr) / 100,
+      verdict: avg(textScr, imageScr) >= 50 ? 'FAKE' : 'REAL',
+      active: { text: true, image: true, social: false },
+      is_placeholder: false,
+    }] : []),
+    ...(textScr !== null && socialScr !== null ? [{
+      variant: 'text_social',
+      prob_fake: avg(textScr, socialScr) / 100,
+      prob_real: 1 - avg(textScr, socialScr) / 100,
+      verdict: avg(textScr, socialScr) >= 50 ? 'FAKE' : 'REAL',
+      active: { text: true, image: false, social: true },
+      is_placeholder: false,
+    }] : []),
+    ...(textScr !== null && imageScr !== null && socialScr !== null ? [{
+      variant: 'full_multimodal',
+      prob_fake: avg(textScr, imageScr, socialScr) / 100,
+      prob_real: 1 - avg(textScr, imageScr, socialScr) / 100,
+      verdict: avg(textScr, imageScr, socialScr) >= 50 ? 'FAKE' : 'REAL',
+      active: { text: true, image: true, social: true },
+      is_placeholder: false,
+    }] : []),
+  ];
 
   const verdictCfg = VERDICT_CONFIG[result.verdict];
 
