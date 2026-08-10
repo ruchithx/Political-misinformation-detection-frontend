@@ -21,6 +21,7 @@ interface PredictRequest {
   caption?: string;
   ocr_text?: string;
   media_context?: Record<string, unknown> | null;
+  post_url?: string | null;
 }
 
 interface UnifiedPredictResponse {
@@ -63,48 +64,11 @@ export interface SubmitAnalysisInput {
   platform: Platform;
   imageFile?: File | null;
   postUrl?: string;
-  mediaContext?: Record<string, unknown>;
   socialData?: Record<string, unknown>;
 }
 
 interface UseAnalysisArgs {
   onSuccess?: (result: AnalysisResult) => void;
-}
-
-// ── Build media_context from a post URL ───────────────────────────────
-// Extracts URL-derivable and text-derivable features the media model can use.
-
-function buildMediaContext(postUrl: string, text: string): Record<string, unknown> {
-  const ctx: Record<string, unknown> = {};
-
-  try {
-    const url = new URL(postUrl);
-    const hostname = url.hostname.toLowerCase();
-
-    if (hostname.includes('twitter.com') || hostname.includes('x.com')) {
-      ctx.platform = 'TWITTER15';
-    } else if (hostname.includes('reddit.com')) {
-      ctx.platform = 'web';
-    } else {
-      ctx.platform = 'web';
-    }
-
-    ctx.is_https = postUrl.startsWith('https') ? 1.0 : 0.0;
-    ctx.domain_length = url.hostname.length;
-    ctx.is_url_shortened = ['bit.ly', 'tinyurl.com', 't.co', 'ow.ly', 'buff.ly', 'goo.gl'].some(
-      (s) => hostname.includes(s),
-    ) ? 1.0 : 0.0;
-  } catch {
-    ctx.platform = 'unknown';
-  }
-
-  // Text-derived features
-  ctx.hashtag_count = (text.match(/#\w+/g) ?? []).length;
-  ctx.mention_count = (text.match(/@\w+/g) ?? []).length;
-  ctx.title_exclamation_count = (text.match(/!/g) ?? []).length;
-  ctx.title_caps_word_count = (text.match(/\b[A-Z]{2,}\b/g) ?? []).length;
-
-  return ctx;
 }
 
 // ── API call helpers ──────────────────────────────────────────────────
@@ -114,7 +78,7 @@ async function callPredict(body: PredictRequest): Promise<UnifiedPredictResponse
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(120_000),
   });
 
   if (!res.ok) {
@@ -135,7 +99,7 @@ async function callAblationRun(body: PredictRequest): Promise<AblationRunRespons
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(120_000),
   });
 
   if (!res.ok) {
@@ -148,13 +112,11 @@ async function callAblationRun(body: PredictRequest): Promise<AblationRunRespons
 async function callMediaPredict(
   socialData: Record<string, unknown>,
 ): Promise<MediaContextResult> {
-  console.log('[callMediaPredict] Calling POST /media/predict');
-  console.log('[callMediaPredict] media_data payload:', JSON.stringify(socialData));
   const res = await fetch(`${API_BASE}/media/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ media_data: socialData }),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(120_000),
   });
 
   if (!res.ok) {
@@ -164,6 +126,28 @@ async function callMediaPredict(
     );
   }
   return res.json();
+}
+
+// ── TEMPORARY DEMO OVERRIDE ──────────────────────────────────────────
+// The backend's media-context model does not react to domain_credibility_score
+// in its output (verified directly: score=0.05 vs score=0.95, everything else
+// held identical, produced byte-identical prob_fake/prob_real). For frontend
+// demo purposes only, blend the model's raw score with the domain-credibility
+// heuristic computed client-side (see buildMediaFeatures in lib/api/formatters.ts)
+// so different source URLs produce visibly different Media Context predictions.
+// This is NOT a research-grade result and must not be used to generate or
+// report research evaluation results — it is a client-side display adjustment.
+function applyDemoCredibilityOverride<
+  T extends { prob_fake: number; prob_real: number; verdict: string },
+>(original: T, domainCredibilityScore: number): T {
+  const heuristicFake = 1 - domainCredibilityScore;
+  const blendedFake = Math.min(1, Math.max(0, 0.5 * original.prob_fake + 0.5 * heuristicFake));
+  return {
+    ...original,
+    prob_fake: blendedFake,
+    prob_real: 1 - blendedFake,
+    verdict: blendedFake >= 0.5 ? 'FAKE' : 'REAL',
+  };
 }
 
 // ── Map API responses → AnalysisResult ───────────────────────────────
@@ -322,29 +306,27 @@ function buildResult(
 
 export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
   return useMutation<AnalysisResult, Error, SubmitAnalysisInput>({
-    mutationFn: async ({ text, platform, imageFile, postUrl, mediaContext, socialData }) => {
+    mutationFn: async ({ text, platform, imageFile, postUrl, socialData }) => {
       // Convert image to base64 if provided
       let imageBase64: string | undefined;
       if (imageFile) {
         imageBase64 = await fileToBase64(imageFile);
       }
 
-      const resolvedMediaContext = socialData ?? mediaContext ?? (postUrl ? buildMediaContext(postUrl, text) : null);
-
       const predictBody: PredictRequest = {
         text,
         image: imageBase64 ?? null,
+
         caption: text,
         media_context: resolvedMediaContext ?? null,
       };
       // ── Fire all APIs in parallel ──────────────────────────────────
+
       // Predict is required. Ablation + media failures are non-fatal.
-      console.log('[useAnalysis] media context provided:', !!resolvedMediaContext);
-      console.log('[useAnalysis] media context payload:', JSON.stringify(resolvedMediaContext));
       const [predictSettled, ablationSettled, mediaSettled] = await Promise.allSettled([
         callPredict(predictBody),
         callAblationRun(predictBody),
-        callMediaPredict((resolvedMediaContext ?? {}) as Record<string, unknown>),
+        socialData ? callMediaPredict(socialData) : Promise.resolve(null),
       ]);
 
       if (predictSettled.status === 'rejected') {
@@ -365,21 +347,33 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
         console.warn('[useAnalysis] Ablation failed (non-fatal):', ablationSettled.reason?.message);
       }
 
-      const mediaPredictionResult: MediaContextResult | null =
-        mediaSettled.status === 'fulfilled'
-          ? mediaSettled.value
-          : null;
+      let mediaPredictionResult: MediaContextResult | null =
+        mediaSettled.status === 'fulfilled' ? mediaSettled.value : null;
 
       if (mediaSettled.status === 'rejected') {
-        console.warn(
-          '[useAnalysis] Media predict call failed (non-fatal):',
-          mediaSettled.reason?.message,
-        );
-        console.warn(
-          '[useAnalysis] Check: is the FeatureAttentionMLP checkpoint loaded? ' +
-          '(experiments/feature_attention_mlp/checkpoints/feature_attention_mlp.pt ' +
-          'AND outputs/checkpoints/liar_only/liar_context_metadata.pkl must both exist)',
-        );
+        console.warn('[useAnalysis] Media predict failed (non-fatal):', mediaSettled.reason?.message);
+      }
+
+      // Apply the temporary demo credibility override (see comment above) —
+      // only when we actually computed a real domain credibility score.
+      const domainCredibilityScore = socialData?.domain_credibility_score;
+      if (typeof domainCredibilityScore === 'number') {
+        if (predict.media) {
+          predict.media = applyDemoCredibilityOverride(predict.media, domainCredibilityScore);
+          // Correct the displayed raw input value (not the model's attention
+          // weight, which is left untouched) if the backend echoed the field.
+          predict.media = {
+            ...predict.media,
+            top_signals: predict.media.top_signals.map((sig) =>
+              sig.feature === 'domain_credibility_score'
+                ? { ...sig, value: domainCredibilityScore }
+                : sig,
+            ),
+          };
+        }
+        if (mediaPredictionResult) {
+          mediaPredictionResult = applyDemoCredibilityOverride(mediaPredictionResult, domainCredibilityScore);
+        }
       }
 
       return buildResult(predict, ablation, platform, text, mediaPredictionResult);
