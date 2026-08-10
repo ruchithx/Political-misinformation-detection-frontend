@@ -318,7 +318,7 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
         image: imageBase64 ?? null,
 
         caption: text,
-        media_context: resolvedMediaContext ?? null,
+        media_context: socialData ?? null,
       };
       // ── Fire all APIs in parallel ──────────────────────────────────
 
