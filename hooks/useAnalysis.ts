@@ -311,11 +311,12 @@ export function useAnalysis({ onSuccess }: UseAnalysisArgs = {}) {
       const predictBody: PredictRequest = {
         text,
         image: imageBase64 ?? null,
-        media_context: socialData ?? null,
-        post_url: postUrl ?? null,
-      };
 
-      // ── Fire predict + ablation + media in parallel ─────────────────
+        caption: text,
+        media_context: resolvedMediaContext ?? null,
+      };
+      // ── Fire all APIs in parallel ──────────────────────────────────
+
       // Predict is required. Ablation + media failures are non-fatal.
       const [predictSettled, ablationSettled, mediaSettled] = await Promise.allSettled([
         callPredict(predictBody),
