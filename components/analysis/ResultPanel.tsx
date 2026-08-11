@@ -1,11 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import { VerdictCard } from './VerdictCard';
 import { ModalityBars } from './ModalityBars';
 import { SentenceHighlighter } from './SentenceHighlighter';
 import { FeatureMetricsCard } from './FeatureMetricsCard';
-import type { AnalysisResult } from '@/lib/types';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import type { AnalysisResult, ClaimScore } from '@/lib/types';
 
 interface ResultPanelProps {
   result: AnalysisResult | null;
@@ -21,10 +24,42 @@ const containerVariants = {
   show: { transition: { staggerChildren: 0.08 } },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
 };
+
+function PerClaimBreakdown({ claims }: { claims: ClaimScore[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-border/50 bg-muted/30 overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-widest text-muted-foreground hover:bg-muted/50 transition-colors"
+      >
+        <span>Per-Claim Analysis</span>
+        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+      </button>
+      {open && (
+        <ul className="divide-y divide-border/30 px-4 pb-3 pt-1 space-y-0">
+          {claims.map((c, i) => (
+            <li key={i} className="flex items-start justify-between gap-3 py-2">
+              <span className="text-xs text-foreground/80 leading-relaxed flex-1">{c.claim_text}</span>
+              <span className="text-xs font-mono text-muted-foreground whitespace-nowrap pt-0.5">
+                {(c.prob_fake * 100).toFixed(1)}%
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && (
+        <p className="px-4 pb-2.5 text-[10px] text-muted-foreground/60 italic">
+          Advisory only — scores individual claims; does not affect the verdict above.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function ResultPanel({ result }: ResultPanelProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -55,7 +90,6 @@ export function ResultPanel({ result }: ResultPanelProps) {
                 Model Breakdown
               </h3>
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
-                {/* Text model */}
                 {result.textResult && (
                   <ModelScoreCard
                     label="Text Model"
@@ -65,8 +99,6 @@ export function ResultPanel({ result }: ResultPanelProps) {
                     detail={`Uncertainty: ${(result.textResult.uncertainty * 100).toFixed(1)}%`}
                   />
                 )}
-
-                {/* Image model */}
                 {result.imageResult && (
                   <ModelScoreCard
                     label="Image Model"
@@ -77,8 +109,6 @@ export function ResultPanel({ result }: ResultPanelProps) {
                     detailTooltip="Semantic alignment between image OCR text and caption"
                   />
                 )}
-
-                {/* Media context model */}
                 {result.mediaResult && (
                   <ModelScoreCard
                     label="Media Context"
@@ -93,6 +123,11 @@ export function ResultPanel({ result }: ResultPanelProps) {
                   />
                 )}
               </div>
+
+              {result.textResult?.segmentation?.claims &&
+                result.textResult.segmentation.claims.length > 1 && (
+                  <PerClaimBreakdown claims={result.textResult.segmentation.claims} />
+              )}
             </motion.div>
           )}
 

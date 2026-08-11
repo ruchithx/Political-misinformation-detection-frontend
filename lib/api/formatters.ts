@@ -31,7 +31,7 @@ export function toPercent(score: number): number {
 
 const URL_SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'buff.ly', 'dlvr.it'];
 
-// Temporary deterministic domain heuristic for frontend demonstration.
+// Temporary domain heuristic for frontend demonstration.
 // This mapping is not the research-grade source credibility estimation method
 // and must not be used to generate or report research evaluation results.
 //
@@ -39,53 +39,83 @@ const URL_SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'buf
 // vocabulary ("high" | "low" | "unknown" — see API-Reference.md). The "medium"
 // tier below has no valid categorical bucket of its own, so it is labeled
 // "unknown" while still carrying a distinct numeric score.
-const HIGH_CREDIBILITY_DOMAINS: Record<string, number> = {
-  'reuters.com': 0.90,
-  'apnews.com': 0.89,
-  'bbc.com': 0.88,
-  'x.com': 0.88,  
-  'bbc.co.uk': 0.88,
-  'cnn.com': 0.86,
-  'npr.org': 0.86,
-  'nytimes.com': 0.85,
-  'washingtonpost.com': 0.84,
-  'aljazeera.com': 0.84,
-  'pbs.org': 0.84,
-  'theguardian.com': 0.83,
-  'cbsnews.com': 0.82,
-  'nbcnews.com': 0.82,
-  'abcnews.go.com': 0.82,
-};
+//
+// TEMPORARY: scores are randomized within a per-tier range on each call rather
+// than using a fixed per-domain value.
+const HIGH_CREDIBILITY_DOMAINS = [
+  'reuters.com',
+  'apnews.com',
+  'bbc.com',
+  'x.com',
+  'bbc.co.uk',
+  'cnn.com',
+  'npr.org',
+  'nytimes.com',
+  'washingtonpost.com',
+  'aljazeera.com',
+  'pbs.org',
+  'theguardian.com',
+  'cbsnews.com',
+  'nbcnews.com',
+  'abcnews.go.com',
+];
 
-const MEDIUM_CREDIBILITY_DOMAINS: Record<string, number> = {
-  'politico.com': 0.72,
-  'time.com': 0.72,
-  'usatoday.com': 0.70,
-  'forbes.com': 0.70,
-  'newsweek.com': 0.68,
-  'businessinsider.com': 0.65,
-  'thehill.com': 0.65,
-  'huffpost.com': 0.62,
-  'nypost.com': 0.55,
-  'dailymail.co.uk': 0.55,
-};
+const MEDIUM_CREDIBILITY_DOMAINS = [
+  'politico.com',
+  'time.com',
+  'usatoday.com',
+  'forbes.com',
+  'facebook.com',
+  'newsweek.com',
+  'businessinsider.com',
+  'thehill.com',
+  'huffpost.com',
+  'nypost.com',
+  'dailymail.co.uk',
+];
 
 // Synthetic .test domains only — never real news organizations, politicians,
 // or governments. Used solely to demonstrate the low-credibility path in the demo.
-const LOW_CREDIBILITY_DEMO_DOMAINS: Record<string, number> = {
-  'fake-news-example.test': 0.20,
-  'fabricated-news.test': 0.25,
-  'misinformation-demo.test': 0.30,
-  'unreliable-source-demo.test': 0.35,
-};
+const LOW_CREDIBILITY_DEMO_DOMAINS = [
+  'fake-news-example.test',
+  'fabricated-news.test',
+  'misinformation-demo.test',
+  'unreliable-source-demo.test',
+  'example.com',
+];
+
+const HIGH_CREDIBILITY_RANGE: [number, number] = [0.6, 0.8];
+const MEDIUM_CREDIBILITY_RANGE: [number, number] = [0.6, 0.7];
+const LOW_CREDIBILITY_RANGE: [number, number] = [0.2, 0.5];
+
+// Deterministic string hash (32-bit) → used to seed the per-URL "random" score
+// so the exact same URL always lands on the exact same value.
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
+function seededUnitRandom(seed: string): number {
+  const x = Math.sin(hashString(seed)) * 10000;
+  return x - Math.floor(x);
+}
+
+/** Same `seed` (e.g. the full URL) always yields the same value within [min, max]. */
+function randomInRange([min, max]: [number, number], seed: string): number {
+  return seededUnitRandom(seed) * (max - min) + min;
+}
 
 /** Exact match or safe parent-domain match (never a raw substring match). */
-function matchDomain(hostname: string, table: Record<string, number>): number | null {
-  if (hostname in table) return table[hostname];
-  for (const domain of Object.keys(table)) {
-    if (hostname.endsWith('.' + domain)) return table[domain];
+function matchDomain(hostname: string, table: string[]): boolean {
+  if (table.includes(hostname)) return true;
+  for (const domain of table) {
+    if (hostname.endsWith('.' + domain)) return true;
   }
-  return null;
+  return false;
 }
 
 interface DomainCredibility {
@@ -93,20 +123,23 @@ interface DomainCredibility {
   label: 'high' | 'low' | 'unknown';
 }
 
-/** Deterministic demo-only credibility lookup — see comment block above. */
-function getDomainCredibility(hostname: string): DomainCredibility {
+/** Demo-only credibility lookup — see comment block above. */
+function getDomainCredibility(hostname: string, url: string): DomainCredibility {
   const normalized = hostname.toLowerCase().replace(/^www\./, '');
 
-  const high = matchDomain(normalized, HIGH_CREDIBILITY_DOMAINS);
-  if (high !== null) return { score: high, label: 'high' };
+  if (matchDomain(normalized, HIGH_CREDIBILITY_DOMAINS)) {
+    return { score: randomInRange(HIGH_CREDIBILITY_RANGE, url), label: 'high' };
+  }
 
-  const medium = matchDomain(normalized, MEDIUM_CREDIBILITY_DOMAINS);
-  if (medium !== null) return { score: medium, label: 'unknown' };
+  if (matchDomain(normalized, MEDIUM_CREDIBILITY_DOMAINS)) {
+    return { score: randomInRange(MEDIUM_CREDIBILITY_RANGE, url), label: 'unknown' };
+  }
 
-  const low = matchDomain(normalized, LOW_CREDIBILITY_DEMO_DOMAINS);
-  if (low !== null) return { score: low, label: 'low' };
+  if (matchDomain(normalized, LOW_CREDIBILITY_DEMO_DOMAINS)) {
+    return { score: randomInRange(LOW_CREDIBILITY_RANGE, url), label: 'low' };
+  }
 
-  return { score: 0.2, label: 'unknown' };
+  return { score: randomInRange(LOW_CREDIBILITY_RANGE, url), label: 'unknown' };
 }
 
 /**
@@ -155,7 +188,7 @@ export function buildMediaFeatures(
       isUrlShortened = URL_SHORTENERS.some(
         (s) => parsed.hostname === s || parsed.hostname.endsWith('.' + s),
       ) ? 1 : 0;
-      domainCredibility = getDomainCredibility(parsed.hostname);
+      domainCredibility = getDomainCredibility(parsed.hostname, postUrl);
     } catch { /* invalid URL — leave defaults */ }
   }
 

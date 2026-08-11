@@ -30,6 +30,11 @@ export interface SentimentSegment {
 
 // ─── Per-model result types (nested in /predict response) ────────────────────
 
+export interface ClaimScore {
+  claim_text: string;
+  prob_fake: number;
+}
+
 export interface TextModelResult {
   prob_fake: number;
   prob_real: number;
@@ -45,6 +50,13 @@ export interface TextModelResult {
   };
   text_normalized: string;
   mc_passes: number;
+  segmentation?: {
+    claims: ClaimScore[];
+    seg_max: number;
+    seg_mean: number;
+    segmentation_flag: boolean;
+    seg_n_claims: number;
+  } | null;
 }
 
 export interface ImageModelResult {

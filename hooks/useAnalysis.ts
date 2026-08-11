@@ -182,8 +182,7 @@ function buildResult(
     predict.image?.verdict?.toUpperCase() === 'FAKE' ||
     predict.media?.verdict?.toUpperCase() === 'FAKE';
 
-  const verdict: AnalysisResult['verdict'] =
-    anyModelFake || predict.prob_fake >= 0.5 ? 'MISINFORMATION' : 'CREDIBLE';
+  const verdict: AnalysisResult['verdict'] = anyModelFake ? 'MISINFORMATION' : 'CREDIBLE';
 
   // Ablation variant score helper
   const variantScore = (name: string): number | null => {
